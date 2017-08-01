@@ -18,30 +18,32 @@ class Actor:
     def act(self):
         """Executes shell command from action. yields to producer.
         Waiting for shell promt brefore and after running"""
-        self.progress = ActionProgress(self.action, ActionState.AWAITING_PROMT, [])
+        self.progress = ActionProgress(ActionState.AWAITING_PROMT, [])
         yield self._step_progress()
         self.await_promt()
         yield self._step_progress()
         self._send_command(self.action.command)
         self.await_promt()
-        yield self._step_progress
+        yield self._step_progress()
         # TODO Make failure handling to 
-        result = ActionResult(ActionResultState.SUCCESS, 0, progress.raw_output, [])
-        yield (self.action, progress, result)
+        result = ActionResult(ActionResultState.SUCCESS, 0, self.progress.raw_output, [])
+        yield (self.action, self.progress, result)
 
     def await_promt(self):
-        promt = re.compile('%s:.*%s\$ ?' % (config.hostname, config.username))
+        # FIXME - YOUR LOCAL USER
+        promt = re.compile('bm:.*fin$ ?')
         self.await_tty_value(promt, lambda out: progress.raw_output.append(out))
 
     def await_tty_value(self, regex, started=datetime.utcnow()):
-        if (datetime.utcnow() - started).seconds > config.timeout:
+        # FIXME TIMEOUT FROM CONFIG
+        if (datetime.utcnow() - started).seconds > 10:
             raise "TIME!!!"
         for line in self._collect_output():
             if regex.match(line):
                 yield line
 
     def _step_progress(self):
-        states = ActionProgress.__members__.values()
+        states = ActionState.__members__.values()
         next_state = states[states.index(self.progress.state) + 1]
         self.progress.state = next_state
         return (self.action, self.progress)
@@ -53,29 +55,21 @@ class Actor:
         while self.channel.recv_ready():
             chunk = self.channel.recv(1024).split("\n")
             for line in chunk:
-                print line 
+                print "OUT: %s" % line
                 yield line
 
 class Producer:
-    def __init__(self):
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.client.AutoAddPolicy)
-        ssh.connect(config.ssh_host, username=config.username)
-        # cls.promt_matcher = re.compile("%s\$$" % config.username)
-        self.__connection = ssh
-        self._actors = []
-
     def produce_action(self, action):
         actor = Actor(self._produce_channel(), action)
         for stage in actor.act():
             self._produce_reports(self.stage)
-            
+
     def _produce_channel(self):
-        channel = self.__connection().get_transport().open_session()
+        channel = self._director.transport().open_session()
         channel.get_pty()
         channel.exec_command("sh -l\n")
         return channel
-
+            
     def _produce_reports(self, stage):
         print "STDOUT REPORT: %s" % stage
 

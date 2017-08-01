@@ -1,11 +1,11 @@
 import re, time
-from net import Protocol
+from vpnheaven.net import Protocol
+from vpnheaven import shell_utils 
 class Server:
     def __init__(self, protocol, host, port):
         self.host = host
         self.protocol= protocol
         self.port = port
-
     def __str__(self):
         return "Server(%s %s:%d)" % (self.protocol, self.host, self.port)
 
@@ -38,31 +38,22 @@ class Config:
     def __repr__(self):
         return str(self)
         
-    # def __load_settings(self):
-    #     nocoment = re.compile('^[^ (#|;)].*', re.MULTILINE)
-    #     lines = [line.strip() for line in nocoment.findall(self.file_content) if len(line.strip()) > 0]
-    #     settings = [re.search('(^\w+) (.*)', l).groups() for l in filter(lambda line: re.match('^\w* ', line), lines)]
-    #     self.devise = ['dev']
-        # self.protocol = getattr(Protocol, hsh['protocol'].upper())
-        # self.host, self.port = hsh['remote'].split(' ')
 class Session:
-    def __init__(self, config, ssh_context):
+    def __init__(self, config):
         self.config = config
-        self.state = 'offline'
-        self.ssh = ssh_context
+        # self.state = 'offline'
 
     def start(self):
         self.config_name = "config_%s.ovpn" % time.time() 
         self.config_path = "./tmp/%s" % self.config_name
-        self._export_config()
-        self._connect()
+        open(self.config_path, 'w').write(self.config.file_content)
+        # self._export_config()
+        # self._connect()
+        shell_utils.upload_files(self.config_path, "/tmp/%s" % self.config_name)
+        self.process = shell_utils.spawn(['/usr/local/sbin/openvpn', '--config', '/tmp/%s' % self.config_name])
 
-    def _export_config(self):
-        with open(self.config_path, "w") as f:
-            f.write(self.config.file_content)
-        self.ssh.upload_file(self.config_path, "/tmp/%s" % self.config_name)
+    def kill(self):
+        shell_utils.kill(self.process.pid)
 
-    def _connect(self):
-        self.ssh.exec_command("openvpn --config /tmp/%s" % self.config_name)
 
 
